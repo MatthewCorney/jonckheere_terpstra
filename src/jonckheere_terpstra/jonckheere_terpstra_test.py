@@ -140,7 +140,7 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
     null_stats = pjtrsum[1:]
     null_mean = np.mean(null_stats)
     null_std = np.std(null_stats, ddof=1)
-    zstat = (jtr0 - null_mean) / null_std
+    zstat = float((jtr0 - null_mean) / null_std)
 
     ipval = float(np.mean(pjtrsum <= jtr0))
     dpval = float(np.mean(pjtrsum >= jtr0))
