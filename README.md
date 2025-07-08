@@ -11,7 +11,7 @@ The function requires the following Python packages:
 - scipy
 
 ## Usage
-`pip install `
+`pip install Jonckheere–Terpstra`
 
 
 ## Example
