@@ -97,7 +97,7 @@ def _jt_approximate_pvalue(jtrsum: float,
         pval = norm.cdf(zstat)
     else:
         raise ValueError("Invalid alternative")
-    return pval.item(), zstat.item()
+    return pval.item(), float(zstat.item())
 
 
 def _jt_permutation_pvalue(x: np.ndarray[np.number],
