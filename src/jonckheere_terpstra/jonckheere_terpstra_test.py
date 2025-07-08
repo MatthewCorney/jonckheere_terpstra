@@ -6,6 +6,7 @@ import numpy as np
 from scipy.stats import rankdata
 from typing import Literal
 from typing import Tuple
+from typing import Optional
 
 _ValidAlternatives = Literal['increasing', 'decreasing', 'two_sided']
 
@@ -140,13 +141,13 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
     null_stats = pjtrsum[1:]
     null_mean = np.mean(null_stats)
     null_std = np.std(null_stats, ddof=1)
-    zstat = float((jtr0 - null_mean) / null_std)
+    zstat = (jtr0 - null_mean) / null_std
 
     ipval = float(np.mean(pjtrsum <= jtr0))
     dpval = float(np.mean(pjtrsum >= jtr0))
 
     if alternative == "two_sided":
-        return 2 * min([ipval, dpval, 0.5]), zstat
+        return 2 * min([ipval, dpval, 0.5]), float(zstat.item())
     elif alternative == "increasing":
         return ipval, zstat
     elif alternative == "decreasing":
@@ -158,7 +159,7 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
 def jonckheere_terpstra_test(x: Union[np.ndarray, list],
                              g: Union[np.ndarray, list],
                              alternative: _ValidAlternatives = "two_sided",
-                             nperm: int = 5000,
+                             nperm: Optional[int] = None,
                              continuity: bool = True) -> tuple[int, float, float]:
     """
     Perform the Jonckheere–Terpstra test for ordered differences among multiple groups.
