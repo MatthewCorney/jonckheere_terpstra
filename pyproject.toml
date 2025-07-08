@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "jonckheere_terpstra"
+version = "0.1.0"
+description = "..."
+authors = ["Matthew Corney"]
+readme = "README.md"
+packages = [
+    {include = "jonckheere_terpstra", from = "src"}
+]
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+numpy = "^2.3.1"
+scipy = "^1.16.0"
+
+[tool.poetry.group.dev.dependencies]
+setuptools = "*"
+wheel = "*"
+pytest = "^8.4.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
