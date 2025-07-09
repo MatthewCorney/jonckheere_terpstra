@@ -60,7 +60,7 @@ def is_close(a, b, tol=1e-4):
                          ids=[f"case_{i}" for i, _ in enumerate(permutation_benchmarks)])
 def test_jonckheere_permutation(record):
     statistic, p_value, zstat = extract_run(record)
-    assert is_close(statistic, record["statistic"], tol=1.1), (
+    assert is_close(statistic, record["statistic"], tol=0.1), (
         f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
     )
     assert is_close(p_value, record["p_value"], tol=0.1), (

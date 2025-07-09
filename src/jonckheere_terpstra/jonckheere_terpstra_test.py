@@ -6,13 +6,16 @@ import pandas as pd
 from scipy.stats import page_trend_test
 from scipy.stats import norm
 
-from scipy.stats import rankdata
 from typing import Literal
 from typing import Tuple
 from typing import Optional
 from typing import Union
 
+from collections import Counter
+from more_itertools import distinct_permutations
+
 _ValidAlternatives = Literal['increasing', 'decreasing', 'two_sided']
+_ValidMethods = Literal['permutation', 'approximate', 'exact']
 
 
 def _compute_jt_statistic(x: np.ndarray[np.number], g: np.ndarray[int]) -> int:
@@ -65,7 +68,7 @@ def _calculate_mean_variance(n: int,
     return jtmean, jtvar
 
 
-def _jt_approximate_pvalue(jtrsum: float,
+def _jt_approximate_pvalue(jt_stat: float,
                            jtmean: float,
                            jtvar: float,
                            alternative: _ValidAlternatives,
@@ -76,7 +79,7 @@ def _jt_approximate_pvalue(jtrsum: float,
     Uses a normal approximation under the null hypothesis to compute a z-score from the observed
     JT statistic, with optional continuity correction.
 
-    :param jtrsum: Observed Jonckheere–Terpstra statistic
+    :param jt_stat: Observed Jonckheere–Terpstra statistic
     :param jtmean: Expected mean of the JT statistic under the null hypothesis
     :param jtvar: Variance of the JT statistic under the null hypothesis
     :param alternative: Direction of the trend to test. One of:
@@ -89,8 +92,8 @@ def _jt_approximate_pvalue(jtrsum: float,
              - z-statistic (float)
     """
     delta = 0.5 if continuity else 0.0
-    adjustment = delta * np.sign(jtrsum - jtmean)
-    zstat = (jtrsum - jtmean - adjustment) / np.sqrt(jtvar)
+    adjustment = delta * np.sign(jt_stat - jtmean)
+    zstat = (jt_stat - jtmean - adjustment) / np.sqrt(jtvar)
     if alternative == "two_sided":
         pval = 2 * norm.sf(abs(zstat))
     elif alternative == "increasing":
@@ -124,28 +127,23 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
          - z-statistic (float)
     """
     ng = len(gsize)
-    pjtrsum: np.ndarray = np.empty(nperm)
+    perm_jt_stat: np.ndarray = np.empty(nperm)
     x_perm = x.copy()
 
     # compute statistic on original and permuted data sequentially
     for i in range(nperm):
-        # compute JT statistic for x_perm
-        jtrsum = 0
-        for gi in range(ng - 1):
-            na = gsize[gi]
-            ranks = rankdata(x_perm[cgsize[gi]:])
-            jtrsum += np.sum(ranks[:na]) - na * (na + 1) / 2
-        pjtrsum[i] = jtrsum
-        # permute for next iteration
-        x_perm = np.random.permutation(x)
-    jtr0 = pjtrsum[0]
-    null_stats = pjtrsum[1:]
+        x_perm = np.random.permutation(x_perm)
+        g_indices = np.repeat(np.arange(ng), gsize)  # Recreate group indices
+        jt_stat = _compute_jt_statistic(x_perm, g_indices)
+        perm_jt_stat[i] = jt_stat
+    jtr0 = perm_jt_stat[0]
+    null_stats = perm_jt_stat[1:]
     null_mean = np.mean(null_stats)
     null_std = np.std(null_stats, ddof=1)
     zstat = (jtr0 - null_mean) / null_std
 
-    ipval = float(np.mean(pjtrsum <= jtr0))
-    dpval = float(np.mean(pjtrsum >= jtr0))
+    ipval = float(np.mean(perm_jt_stat <= jtr0))
+    dpval = float(np.mean(perm_jt_stat >= jtr0))
 
     if alternative == "two_sided":
         return 2 * min([ipval, dpval, 0.5]), float(zstat.item())
@@ -157,17 +155,74 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
         raise ValueError("Invalid alternative")
 
 
+def _compute_jt_statistic_vectorized(ranks: np.ndarray, groups: np.ndarray) -> int:
+    """
+    Vectorized computation of the Jonckheere–Terpstra U statistic.
+    :param ranks: 1-D array of ordinal ranks
+    :param groups: 1-D array of group labels (0,1,2,...)
+    """
+    order = np.argsort(groups)
+    r = ranks[order]
+    g = groups[order]
+    comp = np.less.outer(r, r).astype(int)
+    gcomp = np.less.outer(g, g).astype(int)
+    return int((comp * gcomp).sum())
+
+
+def _jt_exact_pvalue(ranks: np.ndarray,
+                     gsize: np.ndarray,
+                     jt_stat: int,
+                     alternative: str) -> Tuple[float, None]:
+    """
+    Optimized exact p-value calculation via enumeration of unique permutations.
+    Uses Counter over distinct permutations to avoid redundant computations when ties are present.
+
+    :param ranks: 1-D array of ordinal ranks (ties allowed)
+    :param gsize: 1-D array of group sizes
+    :param jt_stat: Observed JT statistic
+    :param alternative: 'increasing', 'decreasing', or 'two_sided'
+    :return: (p-value, None)
+    """
+    # Precompute group labels
+    groups = np.repeat(np.arange(len(gsize)), gsize)
+
+    # Count JT statistic frequencies over unique permutations
+    stat_counts = Counter(
+        _compute_jt_statistic_vectorized(np.array(perm), groups)
+        for perm in distinct_permutations(ranks)
+    )
+    total = sum(stat_counts.values())
+
+    # Compute p-value based on alternative
+    if alternative == 'increasing':
+        # sum frequencies >= observed
+        pval = sum(count for stat, count in stat_counts.items() if stat >= jt_stat) / total
+    elif alternative == 'decreasing':
+        # sum frequencies <= observed
+        pval = sum(count for stat, count in stat_counts.items() if stat <= jt_stat) / total
+    elif alternative == 'two_sided':
+        p_inc = sum(count for stat, count in stat_counts.items() if stat >= jt_stat) / total
+        p_dec = sum(count for stat, count in stat_counts.items() if stat <= jt_stat) / total
+        pval = 2 * min(p_inc, p_dec)
+    else:
+        raise ValueError(f"Invalid alternative: {alternative}")
+
+    return float(pval), None
+
+
 def jonckheere_terpstra_test(x: Union[np.ndarray, list],
                              g: Union[np.ndarray, list],
                              alternative: _ValidAlternatives = "two_sided",
+                             method: _ValidMethods = 'approximate',
                              nperm: Optional[int] = None,
-                             continuity: bool = True) -> tuple[int, float, float]:
+                             continuity: bool = True) -> tuple[int, float, Optional[float]]:
     """
     Perform the Jonckheere–Terpstra test for ordered differences among multiple groups.
 
     The test evaluates whether there is a trend (increasing, decreasing, or two-sided) in the distribution
     of a numeric variable `x` across ordered groups `g`.
 
+    :param method: How to calculate the P-Value, defaults to approximate
     :param x: Numeric observations variable
     :param g: Group labels (must be orderable; numeric or ordinal)
     :param alternative: Direction of the trend to test. One of:
@@ -175,7 +230,7 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
                         - "increasing": test for an increasing trend across groups
                         - "decreasing": test for a decreasing trend across groups
     :param nperm: If provided, compute p-value using `nperm` permutations instead of asymptotic or exact method
-    :param continuity: if continuity correction should, be used in the approximate case
+    :param continuity: if continuity correction should be used in the approximate case
 
     :return: Tuple containing:
          - JT statistic (int)
@@ -184,6 +239,8 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
     """
     if alternative not in ['increasing', 'decreasing', 'two_sided']:
         raise ValueError(f'Alternative must be one of {_ValidAlternatives} {alternative=} passed')
+    if method not in ['permutation', 'approximate', 'exact']:
+        raise ValueError(f'Method must be one of {_ValidMethods} {method=} passed')
     x: np.ndarray[np.number] = np.asarray(x)
     g: np.ndarray[int] = np.asarray(g)
     if not np.issubdtype(x.dtype, np.number):
@@ -192,7 +249,7 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
         raise ValueError("x and g must be the same length")
     if len(np.unique(g)) < 3:
         raise ValueError("Jonckheere–Terpstra test requires at least 3 ordered groups")
-    if len(np.unique(x)) < len(x) and not nperm:
+    if len(np.unique(x)) < len(x) and not (method == 'permutation'):
         warnings.warn("Permutation should be used if ties are present")
 
     finite = np.isfinite(x) & np.isfinite(g)
@@ -213,22 +270,32 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
     jtmean, jtvar = _calculate_mean_variance(n, ng, gsize, cgsize)
 
     # compute jt statistic
-    jtrsum = _compute_jt_statistic(x, g)
-    if nperm:
+    jt_stat = _compute_jt_statistic(x, g)
+    if method == 'permutation':
+        if nperm is None:
+            raise ValueError("You must specify nperm for permutation method.")
         pval, zstat = _jt_permutation_pvalue(x=x,
                                              gsize=gsize,
                                              cgsize=cgsize,
                                              alternative=alternative,
                                              nperm=nperm
                                              )
-    else:
+    elif method == 'approximate':
         pval, zstat = _jt_approximate_pvalue(jtmean=jtmean,
                                              jtvar=jtvar,
-                                             jtrsum=jtrsum,
+                                             jt_stat=jt_stat,
                                              alternative=alternative,
                                              continuity=continuity
                                              )
-    return jtrsum, pval, zstat
+    elif method == 'exact':
+        if n > 10:  # Adjust threshold as needed
+            warnings.warn(f"Exact method with n={n} may be very slow. Consider 'approximate' or 'permutation' methods.")
+        ranks = np.argsort(np.argsort(x))
+        pval, zstat = _jt_exact_pvalue(
+            ranks=ranks, gsize=gsize,
+            jt_stat=jt_stat, alternative=alternative
+        )
+    return jt_stat, pval, zstat
 
 
 def pages_l_test(x: Union[np.ndarray, list],
@@ -262,7 +329,7 @@ def pages_l_test(x: Union[np.ndarray, list],
     if len(x) != len(g):
         raise ValueError("x and g must be the same length")
     if len(np.unique(g)) < 3:
-        raise ValueError("Jonckheere–Terpstra test requires at least 3 ordered groups")
+        raise ValueError("Pages L test requires at least 3 ordered groups")
     if alternative not in ['increasing', 'decreasing', 'two_sided']:
         raise ValueError(f'Alternative must be one of {_ValidAlternatives} {alternative=} passed')
 

@@ -3,12 +3,13 @@ import json
 import numpy as np
 from tests.python_generation.regressionpack import JonckheereTerpstra
 from pathlib import Path
+from typing import Optional
 
 _PYTHON_TESTING_DATA_DIR = Path('tests') / "python_generation"
 _APPROXIMATE_REGRESSION_PACK_TESTING_DATA = _PYTHON_TESTING_DATA_DIR / "jonckheere_test_results_regression_pack.json"
 
 
-def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: int = 42):
+def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: Optional[int] = None):
     """
     Builds the data object required for the regressionpack approach
 
@@ -21,14 +22,9 @@ def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: i
     if seed is not None:
         np.random.seed(seed)
 
-    base = np.random.normal(loc=100, scale=10, size=group_size)
-    data = []
-    for t in range(groups):
-        direction = slope * (t - (groups - 1) / 2)
-        shift = direction * 10  # Scale this to control impact
-        noise = np.random.normal(loc=0, scale=5, size=group_size)
-        timepoint_data = base + shift + noise
-        data.append([int(x) for x in list(np.round(timepoint_data))])
+    base = np.random.rand(group_size, 1)
+    trend = slope * np.arange(groups)
+    data = base + trend
     return data
 
 
@@ -44,7 +40,8 @@ def main():
                 slope = np.random.uniform(-1, 1, 1)[0].item()
                 data = _build_group_data_helper(group_size=group_size,
                                                 groups=group_number,
-                                                slope=slope)
+                                                slope=slope,
+                                                seed=i)
                 jt = JonckheereTerpstra(data)
 
                 approximateProbability = jt.ComputeApproximateProbability()
@@ -54,7 +51,7 @@ def main():
                 x = []
                 g = []
                 for index, values in enumerate(data):
-                    g.extend([index+1 for _ in values])
+                    g.extend([index + 1 for _ in values])
                     x.extend(values)
                 results.append({
                     'ties': len(set(x)) > len(x),
