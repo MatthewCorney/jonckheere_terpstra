@@ -3,11 +3,14 @@ import numpy as np
 import pytest
 from pathlib import Path
 from typing import Tuple
-from jonckheere_terpstra.jonckheere_terpstra_test import jonckheere_terpstra_test
+from jonckheere_terpstra import jonckheere_terpstra_test
 
-_TESTING_DATA_DIR=Path("R")
-_PERMUTATION_TESTING_DATA=_TESTING_DATA_DIR/"jonckheere_test_results_PMCMRplus.json"
-_APPROXIMATE_TESTING_DATA=_TESTING_DATA_DIR/"jonckheere_test_results_clinfun.json"
+_R_TESTING_DATA_DIR = Path("R_generation")
+_PYTHON_TESTING_DATA_DIR = Path("python_generation")
+
+_PERMUTATION_TESTING_DATA = _R_TESTING_DATA_DIR / "jonckheere_test_results_PMCMRplus.json"
+_APPROXIMATE_TESTING_DATA = _R_TESTING_DATA_DIR / "jonckheere_test_results_clinfun.json"
+_APPROXIMATE_REGRESSION_PACK_TESTING_DATA = _PYTHON_TESTING_DATA_DIR / "jonckheere_test_results_regression_pack.json"
 
 # Load test data
 with open(_PERMUTATION_TESTING_DATA, 'r') as f:
@@ -16,8 +19,11 @@ with open(_PERMUTATION_TESTING_DATA, 'r') as f:
 with open(_APPROXIMATE_TESTING_DATA, 'r') as f:
     approximate_benchmarks = json.load(f)
 
+with open(_APPROXIMATE_REGRESSION_PACK_TESTING_DATA, 'r') as f:
+    approximate_rp_benchmarks = json.load(f)
 
-def extract_run(record: dict)->Tuple[int,float, float]:
+
+def extract_run(record: dict) -> Tuple[int, float, float]:
     """
     Utility function for running the tests
 
@@ -77,7 +83,26 @@ def test_jonckheere_approximate(record):
         f"P-value mismatch in {record}: expected {record['p_value']}, got {p_value}"
     )
     assert is_close(zstat, record["zstat"], tol=0.1), (
-        f"P-value mismatch in {record}: expected {record['zstat']}, got {zstat}"
+        f"Z-stat mismatch in {record}: expected {record['zstat']}, got {zstat}"
+    )
+    assert (0.05 > p_value) == record["significant"], (
+        f"Significance differs in {record}: expected {record['significant']}, got {0.05 > p_value}"
+    )
+
+
+@pytest.mark.parametrize("record",
+                         approximate_rp_benchmarks,
+                         ids=[f"case_{i}" for i, _ in enumerate(approximate_rp_benchmarks)])
+def test_jonckheere_approximate_rp(record):
+    statistic, p_value, zstat = extract_run(record)
+    assert is_close(statistic, record["statistic"], tol=0.1), (
+        f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
+    )
+    assert is_close(p_value, record["p_value"], tol=0.1), (
+        f"P-value mismatch in {record}: expected {record['p_value']}, got {p_value}"
+    )
+    assert is_close(zstat, record["zstat"], tol=0.1), (
+        f"Z-stat mismatch in {record}: expected {record['zstat']}, got {zstat}"
     )
     assert (0.05 > p_value) == record["significant"], (
         f"Significance differs in {record}: expected {record['significant']}, got {0.05 > p_value}"
