@@ -77,7 +77,7 @@ def test_jonckheere_approximate(record):
         f"P-value mismatch in {record}: expected {record['p_value']}, got {p_value}"
     )
     assert is_close(zstat, record["zstat"], tol=0.1), (
-        f"P-value mismatch in {record}: expected {record['p_value']}, got {p_value}"
+        f"P-value mismatch in {record}: expected {record['zstat']}, got {zstat}"
     )
     assert (0.05 > p_value) == record["significant"], (
         f"Significance differs in {record}: expected {record['significant']}, got {0.05 > p_value}"
