@@ -10,11 +10,12 @@ _APPROXIMATE_REGRESSION_PACK_TESTING_DATA = _PYTHON_TESTING_DATA_DIR / "jonckhee
 
 def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: int = 42):
     """
+    Builds the data object required for the regressionpack approach
 
-    :param group_size:
-    :param groups:
-    :param slope:
-    :param seed:
+    :param group_size: Size of the groups
+    :param groups: Number of groups
+    :param slope: Slope of the data
+    :param seed: Seed for randomness
     :return:
     """
     if seed is not None:
@@ -22,7 +23,6 @@ def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: i
 
     base = np.random.normal(loc=100, scale=10, size=group_size)
     data = []
-
     for t in range(groups):
         direction = slope * (t - (groups - 1) / 2)
         shift = direction * 10  # Scale this to control impact
@@ -33,6 +33,10 @@ def _build_group_data_helper(group_size: int, groups: int, slope: float, seed: i
 
 
 def main():
+    """
+    Creates the benchmark file
+    :return:
+    """
     results = []
     for i in range(0, 2):
         for group_size in (5, 10, 20, 30):
