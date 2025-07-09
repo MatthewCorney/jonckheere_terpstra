@@ -107,7 +107,6 @@ def _jt_approximate_pvalue(jt_stat: float,
 
 def _jt_permutation_pvalue(x: np.ndarray[np.number],
                            gsize: np.ndarray[int],
-                           cgsize: np.ndarray,
                            alternative: str,
                            nperm: int) -> Tuple[float, float]:
     """
@@ -118,7 +117,6 @@ def _jt_permutation_pvalue(x: np.ndarray[np.number],
 
     :param x: Data values (must be numeric)
     :param gsize: Sizes of each group, in increasing order
-    :param cgsize: Cumulative group sizes (used for slicing into x)
     :param alternative: One of "two_sided", "increasing", or "decreasing"
     :param nperm: Number of permutations to perform
 
@@ -276,16 +274,8 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
             raise ValueError("You must specify nperm for permutation method.")
         pval, zstat = _jt_permutation_pvalue(x=x,
                                              gsize=gsize,
-                                             cgsize=cgsize,
                                              alternative=alternative,
                                              nperm=nperm
-                                             )
-    elif method == 'approximate':
-        pval, zstat = _jt_approximate_pvalue(jtmean=jtmean,
-                                             jtvar=jtvar,
-                                             jt_stat=jt_stat,
-                                             alternative=alternative,
-                                             continuity=continuity
                                              )
     elif method == 'exact':
         if n > 10:  # Adjust threshold as needed
@@ -295,6 +285,13 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
             ranks=ranks, gsize=gsize,
             jt_stat=jt_stat, alternative=alternative
         )
+    else:
+        pval, zstat = _jt_approximate_pvalue(jtmean=jtmean,
+                                             jtvar=jtvar,
+                                             jt_stat=jt_stat,
+                                             alternative=alternative,
+                                             continuity=continuity
+                                             )
     return jt_stat, pval, zstat
 
 
