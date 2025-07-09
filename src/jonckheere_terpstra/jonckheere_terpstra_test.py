@@ -1,4 +1,3 @@
-from typing import Union
 import warnings
 
 import numpy as np
@@ -11,6 +10,7 @@ from scipy.stats import rankdata
 from typing import Literal
 from typing import Tuple
 from typing import Optional
+from typing import Union
 
 _ValidAlternatives = Literal['increasing', 'decreasing', 'two_sided']
 
@@ -273,10 +273,10 @@ def pages_l_test(x: Union[np.ndarray, list],
     data = df_pivot.to_numpy()
     if alternative == 'increasing':
         result = page_trend_test(data)
-        statistic, pval = float(result.statistic), float(result.pvalue)
+        statistic, pval = result.statistic, result.pvalue
     elif alternative == 'decreasing':
         result = page_trend_test(data[:, ::-1])
-        statistic, pval = float(result.statistic), float(result.pvalue)
+        statistic, pval = result.statistic, result.pvalue
     elif alternative == 'two_sided':
         iresult = page_trend_test(data)
         dresult = page_trend_test(data[:, ::-1])
@@ -288,4 +288,4 @@ def pages_l_test(x: Union[np.ndarray, list],
             statistic = dresult.statistic
     else:
         raise ValueError("Invalid alternative")
-    return pval, statistic
+    return float(pval), float(statistic)
