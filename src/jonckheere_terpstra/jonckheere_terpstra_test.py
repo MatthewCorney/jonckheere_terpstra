@@ -1,8 +1,12 @@
 from typing import Union
 import warnings
-from scipy.stats import norm
 
 import numpy as np
+import pandas as pd
+
+from scipy.stats import page_trend_test
+from scipy.stats import norm
+
 from scipy.stats import rankdata
 from typing import Literal
 from typing import Tuple
@@ -22,7 +26,6 @@ def _compute_jt_statistic(x: np.ndarray[np.number], g: np.ndarray[int]) -> int:
     :return int: The JT test statistic
     """
 
-    # get group boundaries
     _, counts = np.unique(g, return_counts=True)
     cg: np.ndarray = np.concatenate(([0], np.cumsum(counts)))
 
@@ -32,8 +35,6 @@ def _compute_jt_statistic(x: np.ndarray[np.number], g: np.ndarray[int]) -> int:
         xi = x[cg[i]: cg[i + 1]]
         for j in range(i + 1, len(counts)):
             xj = x[cg[j]: cg[j + 1]]
-            # count all xi in Xi less than each xj in Xj
-            # vectorized: Xi[:,None] < Xj  → boolean matrix
             u += np.sum(xi[:, None] < xj)
     return int(u)
 
@@ -167,7 +168,7 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
     The test evaluates whether there is a trend (increasing, decreasing, or two-sided) in the distribution
     of a numeric variable `x` across ordered groups `g`.
 
-    :param x: Numeric response variable
+    :param x: Numeric observations variable
     :param g: Group labels (must be orderable; numeric or ordinal)
     :param alternative: Direction of the trend to test. One of:
                         - "two_sided": test for any ordered difference
@@ -198,21 +199,20 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
     x = x[finite]
     g = g[finite]
 
-    # sort by group
     order = np.argsort(g)
     x = x[order]
     g = g[order]
 
-    # group sizes
     _, counts = np.unique(g, return_counts=True)
     gsize: np.ndarray[int] = counts
     ng: int = len(gsize)
     cgsize: np.ndarray[int] = np.concatenate(([0], np.cumsum(gsize)))
     n: int = len(x)
 
-    # compute mean, var, and observed statistic
+    # compute mean and  var
     jtmean, jtvar = _calculate_mean_variance(n, ng, gsize, cgsize)
 
+    # compute jt statistic
     jtrsum = _compute_jt_statistic(x, g)
     if nperm:
         pval, zstat = _jt_permutation_pvalue(x=x,
@@ -229,3 +229,63 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
                                              continuity=continuity
                                              )
     return jtrsum, pval, zstat
+
+
+def pages_l_test(x: Union[np.ndarray, list],
+                 g: Union[np.ndarray, list],
+                 s: Union[np.ndarray, list],
+                 alternative: _ValidAlternatives = "two_sided", ) -> Tuple[float, float]:
+    """
+    Wrapper for the scipy Page's L test for ordered alternatives across treatments.
+
+    Page's trend test is a non-parametric test used to detect a monotonic trend
+    (increasing or decreasing) across multiple treatments, with repeated measures
+    for each subject.
+
+    :param x: Numeric observations variable
+    :param g: Group labels (must be orderable; numeric or ordinal)
+    :param s: Subject identifiers
+    :param alternative: Direction of the alternative hypothesis:
+                        - 'increasing' (default): test for monotonic increase.
+                        - 'decreasing': test for monotonic decrease.
+                        - 'two_sided': tests both directions by doubling the smaller p-value.
+
+    :return: Tuple containing:
+             - Pages L statistic (float)
+             - p-value (float)
+    """
+    x: np.ndarray[np.number] = np.asarray(x)
+    g: np.ndarray[int] = np.asarray(g)
+    s: np.ndarray = np.asarray(s)
+    if not np.issubdtype(x.dtype, np.number):
+        raise ValueError("x must be numeric")
+    if len(x) != len(g):
+        raise ValueError("x and g must be the same length")
+    if len(np.unique(g)) < 3:
+        raise ValueError("Jonckheere–Terpstra test requires at least 3 ordered groups")
+    if alternative not in ['increasing', 'decreasing', 'two_sided']:
+        raise ValueError(f'Alternative must be one of {_ValidAlternatives} {alternative=} passed')
+
+    df = pd.DataFrame({'s': s, 'g': g, 'x': x})
+    df_pivot = df.pivot(index='s', columns='g', values='x')
+    df_pivot = df_pivot[list(sorted((set(g))))]
+
+    data = df_pivot.to_numpy()
+    if alternative == 'increasing':
+        result = page_trend_test(data)
+        statistic, pval = float(result.statistic), float(result.pvalue)
+    elif alternative == 'decreasing':
+        result = page_trend_test(data[:, ::-1])
+        statistic, pval = float(result.statistic), float(result.pvalue)
+    elif alternative == 'two_sided':
+        iresult = page_trend_test(data)
+        dresult = page_trend_test(data[:, ::-1])
+        if iresult.pvalue < dresult.pvalue:
+            pval = min(2 * iresult.pvalue, 1)
+            statistic = iresult.statistic
+        else:
+            pval = min(2 * dresult.pvalue, 1)
+            statistic = dresult.statistic
+    else:
+        raise ValueError("Invalid alternative")
+    return pval, statistic
