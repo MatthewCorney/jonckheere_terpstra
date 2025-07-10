@@ -11,6 +11,7 @@ _PYTHON_TESTING_DATA_DIR = Path("python_generation")
 _PERMUTATION_TESTING_DATA = _R_TESTING_DATA_DIR / "jonckheere_test_results_PMCMRplus.json"
 _APPROXIMATE_TESTING_DATA = _R_TESTING_DATA_DIR / "jonckheere_test_results_clinfun.json"
 _APPROXIMATE_REGRESSION_PACK_TESTING_DATA = _PYTHON_TESTING_DATA_DIR / "jonckheere_test_results_regression_pack.json"
+_EXACT_REGRESSION_PACK_TESTING_DATA = _PYTHON_TESTING_DATA_DIR / "exact_jonckheere_test_results_regression_pack.json"
 
 # Load test data
 with open(_PERMUTATION_TESTING_DATA, 'r') as f:
@@ -21,6 +22,9 @@ with open(_APPROXIMATE_TESTING_DATA, 'r') as f:
 
 with open(_APPROXIMATE_REGRESSION_PACK_TESTING_DATA, 'r') as f:
     approximate_rp_benchmarks = json.load(f)
+
+with open(_EXACT_REGRESSION_PACK_TESTING_DATA, 'r') as f:
+    exact_rp_benchmarks = json.load(f)
 
 
 def extract_run(record: dict) -> Tuple[int, float, float]:
@@ -58,7 +62,13 @@ def is_close(a, b, tol=1e-4):
 @pytest.mark.parametrize("record",
                          permutation_benchmarks,
                          ids=[f"case_{i}" for i, _ in enumerate(permutation_benchmarks)])
-def test_jonckheere_permutation(record):
+def test_jonckheere_permutation(record: dict):
+    """
+    Test the permutation cases from PCMRPlus
+
+    :param record: Dictionary of generated testing data
+    :return:
+    """
     statistic, p_value, zstat = extract_run(record)
     assert is_close(statistic, record["statistic"], tol=0.1), (
         f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
@@ -74,7 +84,13 @@ def test_jonckheere_permutation(record):
 @pytest.mark.parametrize("record",
                          approximate_benchmarks,
                          ids=[f"case_{i}" for i, _ in enumerate(approximate_benchmarks)])
-def test_jonckheere_approximate(record):
+def test_jonckheere_approximate(record: dict):
+    """
+    Test the approximate cases from clinfun
+
+    :param record: Dictionary of generated testing data
+    :return:
+    """
     statistic, p_value, zstat = extract_run(record)
     assert is_close(statistic, record["statistic"], tol=1.1), (
         f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
@@ -93,7 +109,13 @@ def test_jonckheere_approximate(record):
 @pytest.mark.parametrize("record",
                          approximate_rp_benchmarks,
                          ids=[f"case_{i}" for i, _ in enumerate(approximate_rp_benchmarks)])
-def test_jonckheere_approximate_rp(record):
+def test_jonckheere_approximate_rp(record: dict):
+    """
+    Test the approximate cases from regressionpack 1.0.5
+
+    :param record: Dictionary of generated testing data
+    :return:
+    """
     statistic, p_value, zstat = extract_run(record)
     assert is_close(statistic, record["statistic"], tol=0.1), (
         f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
@@ -103,6 +125,27 @@ def test_jonckheere_approximate_rp(record):
     )
     assert is_close(zstat, record["zstat"], tol=0.1), (
         f"Z-stat mismatch in {record}: expected {record['zstat']}, got {zstat}"
+    )
+    assert (0.05 > p_value) == record["significant"], (
+        f"Significance differs in {record}: expected {record['significant']}, got {0.05 > p_value}"
+    )
+
+
+@pytest.mark.parametrize("record",
+                         exact_rp_benchmarks,
+                         ids=[f"case_{i}" for i, _ in enumerate(exact_rp_benchmarks)])
+def test_jonckheere_exact_rp(record: dict):
+    """
+
+    :param record:
+    :return:
+    """
+    statistic, p_value, zstat = extract_run(record)
+    assert is_close(statistic, record["statistic"], tol=0.1), (
+        f"Statistic mismatch in {record}: expected {record['statistic']}, got {statistic}"
+    )
+    assert is_close(p_value, record["p_value"], tol=0.1), (
+        f"P-value mismatch in {record}: expected {record['p_value']}, got {p_value}"
     )
     assert (0.05 > p_value) == record["significant"], (
         f"Significance differs in {record}: expected {record['significant']}, got {0.05 > p_value}"

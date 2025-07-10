@@ -281,10 +281,11 @@ def jonckheere_terpstra_test(x: Union[np.ndarray, list],
         if n > 10:  # Adjust threshold as needed
             warnings.warn(f"Exact method with n={n} may be very slow. Consider 'approximate' or 'permutation' methods.")
         ranks = np.argsort(np.argsort(x))
-        pval, zstat = _jt_exact_pvalue(
-            ranks=ranks, gsize=gsize,
-            jt_stat=jt_stat, alternative=alternative
-        )
+        pval, zstat = _jt_exact_pvalue(ranks=ranks,
+                                       gsize=gsize,
+                                       jt_stat=jt_stat,
+                                       alternative=alternative
+                                       )
     else:
         pval, zstat = _jt_approximate_pvalue(jtmean=jtmean,
                                              jtvar=jtvar,
